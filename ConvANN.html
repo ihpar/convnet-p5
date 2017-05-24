@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>Parlak | ConvNetJS & P5</title>
+    <script language="javascript" type="text/javascript" src="js/jquery-3.2.1.min.js"></script>
+    <script language="javascript" type="text/javascript" src="js/convnet.js"></script>
+    <script language="javascript" type="text/javascript" src="js/p5.js"></script>
+
+    <link rel="stylesheet" href="css/bulma.css">
+
+    <style>
+        html {
+            height: 100%;
+            background-color: #181B22;
+        }
+
+        body {
+            padding: 0;
+            margin: 0;
+            color: #fff;
+        }
+
+        #dvMain,
+        #dvMenuWrapper {
+            width: 766px;
+            height: 516px;
+            margin-left: auto;
+            margin-right: auto;
+            margin-bottom: 20px;
+            border: 2px solid #080B11;
+            border-radius: 6px;
+            padding: 6px;
+        }
+
+        #dvMenuWrapper {
+            height: auto;
+        }
+
+        .sLabel,
+        .sWrapper {
+            height: 36px;
+            line-height: 36px;
+            margin-right: 5px;
+            float: left;
+        }
+
+        .sWrapper input {
+            margin: 0;
+            padding: 0;
+            height: 36px;
+            display: block;
+        }
+
+        .sLabel label {
+            margin: 0;
+            padding: 0;
+            height: 36px;
+        }
+
+        .sLabel input {
+            margin: 0;
+            padding: 0;
+            height: 36px;
+            vertical-align: middle;
+        }
+
+        .tr {
+            overflow: auto;
+            background-color: #080B11;
+            border: 1px solid #080B11;
+            border-radius: 6px;
+            padding: 4px 0;
+            margin: 10px 0;
+        }
+
+        .cell {
+            padding: 4px;
+            float: left;
+        }
+
+        .button {
+            height: 36px;
+        }
+    </style>
+
+</head>
+
+<body>
+<div style="height: 20px;"></div>
+<div id="dvMain"></div>
+<div id="dvMenuWrapper">
+    <div class="tr">
+        <div class="cell">
+            <input type="button" class="button is-danger" id="btnToggle0" value="Toggle Red Volume"/>
+            <input type="button" class="button is-primary" id="btnToggle1" value="Toggle Blue Volume"/>
+        </div>
+        <div class="cell dvSliderWrapper">
+            <span class="sLabel">Volume Opacity</span><span class="sWrapper"><input id="opacityRange" type="range" min="0" max="255" value="200"/></span>
+        </div>
+    </div>
+    <div class="tr">
+        <div class="cell">
+            <input type="button" class="button is-success" id="btnNewData" value="New..."/>
+        </div>
+        <div class="cell">
+                    <span class="sLabel">
+						<label for="rbtnRed">Red</label>
+						<input type="radio" name="dataClass" id="rbtnRed" checked>
+					</span>
+            <span class="sLabel">
+						<label for="rbtnBlue">Blue</label>
+						<input type="radio" name="dataClass" id="rbtnBlue">
+					</span>
+        </div>
+        <div class="cell dvSliderWrapper">
+            <span class="sLabel">X</span><span class="sWrapper"><input id="xRange" type="range" min="-300" max="300"/></span>
+        </div>
+        <div class="cell dvSliderWrapper">
+            <span class="sLabel">Y</span><span class="sWrapper"><input id="yRange" type="range" min="-220" max="220"/></span>
+        </div>
+        <div class="cell dvSliderWrapper">
+            <span class="sLabel">Z</span><span class="sWrapper"><input id="zRange" type="range" min="-180" max="180"/></span>
+        </div>
+        <div class="cell">
+                    <span class="sLabel">
+						<label for="cbxOverfit">Overfit</label>
+						<input type="checkbox" id="cbxOverfit">
+					</span>
+        </div>
+        <div class="cell" style="width: 100%;">
+            <input type="button" class="button is-success" id="btnSubmitNewData" value="Done!" style="width: 100%;" disabled/>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    // globals
+    var data = [];
+    var dataColors = ["#830025", "#014A5E"];
+    var net;
+    var layer_defs = [];
+    var trainer;
+
+    var isClass0Visible = true;
+    var isClass1Visible = true;
+    var canRotateCanvas = true;
+    var dotsOpacity = 200;
+
+    var newData = null;
+    var overfit = false;
+
+    // bind dom elem's event listeners
+    function bindEventListeners() {
+        $("#btnToggle0").click(function () {
+            isClass0Visible = !isClass0Visible;
+        });
+
+        $("#btnToggle1").click(function () {
+            isClass1Visible = !isClass1Visible;
+        });
+
+        $("#opacityRange").on("mousemove change", function () {
+            dotsOpacity = parseInt($(this).val());
+        });
+
+        $(".dvSliderWrapper").mouseenter(function () {
+            canRotateCanvas = false;
+        });
+
+        $(".dvSliderWrapper").mouseleave(function () {
+            canRotateCanvas = true;
+        });
+
+        $("#btnNewData").click(function () {
+            $(this).prop("disabled", true);
+            newData = {
+                x: 0,
+                y: 0,
+                z: 0,
+                tag: 0
+            };
+            $("#btnSubmitNewData").prop("disabled", false);
+        });
+
+        $("#btnSubmitNewData").click(function () {
+            $(this).prop("disabled", true);
+            data.push(newData);
+            newData = null;
+            canTrainCNN = true;
+            // re-train net
+            noLoop();
+            initNet();
+            trainNet();
+            loop();
+            classifyDots();
+            // reset sliders
+            $("#xRange,#yRange,#zRange").val(0);
+            $("#rbtnRed").prop("checked", true);
+            $("#btnNewData").prop("disabled", false);
+            $("#cbxOverfit").prop("checked", false);
+            overfit = false;
+        });
+
+        $("#xRange").on("mousemove change", function () {
+            if (newData) newData.x = parseInt($(this).val());
+        });
+
+        $("#yRange").on("mousemove change", function () {
+            if (newData) newData.y = parseInt($(this).val()) * -1;
+        });
+
+        $("#zRange").on("mousemove change", function () {
+            if (newData) newData.z = parseInt($(this).val()) * -1;
+        });
+
+        $("#rbtnRed").on("change", function () {
+            if ($(this).is(":checked") && newData) {
+                newData.tag = 0;
+            }
+        });
+
+        $("#rbtnBlue").on("change", function () {
+            if ($(this).is(":checked") && newData) {
+                newData.tag = 1;
+            }
+        });
+
+        $("#cbxOverfit").on("change", function () {
+            overfit = $(this).is(":checked");
+        });
+    }
+
+    // populate initial data set with 2 distinct classes randomly
+    function populateInitData() {
+        data = [];
+        for (var i = 0; i < 20; i++) {
+            if (i < 10) {
+                data.push({
+                    x: random(-300, 300),
+                    y: random(-220, 220),
+                    z: random(-180, 10),
+                    tag: 0
+                });
+            } else {
+                data.push({
+                    x: random(-300, 300),
+                    y: random(-220, 220),
+                    z: random(-10, 180),
+                    tag: 1
+                });
+            }
+        }
+    }
+
+    var neuronPerLayer = 12;
+
+    // initialize the CNN
+    function initNet() {
+        console.log(" ");
+        console.log("**************************************************");
+        console.log("*** initializing CNN with " + neuronPerLayer + " neurons per layer ***");
+        console.log("**************************************************");
+        console.log(" ");
+
+        layer_defs = [];
+        layer_defs.push({
+            type: "input",
+            out_sx: 1,
+            out_sy: 1,
+            out_depth: 3
+        });
+        layer_defs.push({
+            type: "fc",
+            num_neurons: neuronPerLayer,
+            activation: "sigmoid"
+        });
+        layer_defs.push({
+            type: "fc",
+            num_neurons: neuronPerLayer,
+            activation: "sigmoid"
+        });
+        layer_defs.push({
+            type: "softmax",
+            num_classes: 2
+        });
+
+        net = new convnetjs.Net();
+        net.makeLayers(layer_defs);
+
+        trainer = new convnetjs.Trainer(net, {
+            learning_rate: 0.005,
+            l2_decay: 0.001
+        });
+    }
+
+    var canTrainCNN = true;
+    // train the CNN
+    function trainNet() {
+        console.log("starting net training...");
+        var x = new convnetjs.Vol(1, 1, 3);
+        var stats;
+        var iters = 0;
+        var avgLoss = 0.0;
+        var totalLoss = 0.0;
+        var continueIteration = true;
+        //var epsilon = parseFloat(1 / data.length);
+        var epsilon = 0.05;
+        var maxNumIters = data.length * 100;
+
+        while (canTrainCNN) {
+            canTrainCNN = false;
+            while (continueIteration) {
+                totalLoss = 0.0;
+                for (var i = 0; i < data.length; i++) {
+                    x.w = [data[i].x, data[i].y, data[i].z];
+                    stats = trainer.train(x, data[i].tag);
+                    totalLoss += stats.loss;
+                }
+
+                avgLoss = totalLoss / data.length;
+                if (iters % 500 == 0) {
+                    console.log("iteration: " + iters + ", avg loss: " + avgLoss);
+                }
+
+                iters++;
+                if (overfit) {
+                    // network is trained until it overfits
+                    if (iters > (maxNumIters * 10) || avgLoss < epsilon) {
+                        if (avgLoss < epsilon) {
+                            // successfully classified & overfitted
+                            continueIteration = false;
+                        } else {
+                            // probably hit a local minima
+                            // re-start CNN & training
+                            console.log(" ");
+                            console.log("------------------------------------");
+                            console.log("---- RESTARTING CNN & TRAINING! ----");
+                            console.log("------------------------------------");
+                            console.log(" ");
+                            iters = 0;
+                            avgLoss = 0.0;
+                            totalLoss = 0.0;
+                            continueIteration = true;
+                            canTrainCNN = true;
+                            neuronPerLayer++;
+                            initNet();
+                        }
+                    }
+                } else {
+                    // regular training with possibility of outliers
+                    if (iters > maxNumIters) {
+                        continueIteration = false;
+                    }
+                }
+            }
+        }
+
+        console.log("net trained " + ((overfit == true) ? "with overfitting option" : "without overfitting option"));
+        console.log("total iterations: " + (iters - 1) + ", final avg loss: " + avgLoss);
+    }
+
+    // draw data points on canvas
+    function drawData() {
+        for (var i = 0; i < data.length; i++) {
+            push();
+            translate(data[i].x, data[i].y, data[i].z);
+            ambientMaterial(dataColors[data[i].tag]);
+            sphere(10);
+            pop();
+        }
+
+        if (newData) {
+            push();
+            translate(newData.x, newData.y, newData.z);
+            ambientMaterial(dataColors[newData.tag]);
+            sphere(40);
+            pop();
+        }
+    }
+
+    // draw x, y, z azes on canvas
+    function drawAxes() {
+        push();
+        translate(0, 0, 0);
+        ambientMaterial(24, 118, 24, 200);
+        cylinder(2, width * 2);
+        pop();
+
+        push();
+        rotateZ(radians(90));
+        ambientMaterial(3, 85, 3, 200);
+        cylinder(2, width * 2);
+        pop();
+
+        push();
+        rotateX(radians(90));
+        ambientMaterial(0, 31, 0, 200);
+        cylinder(2, width * 2);
+        pop();
+    }
+
+    var resolution = 50;
+    var cubeEdge = resolution - 6;
+    var dotsClass = [];
+    // classify cubes red or blue
+    function classifyDots() {
+        dotsClass = [];
+        var netx = new convnetjs.Vol(1, 1, 3);
+        for (var z = -200; z < 200; z += resolution) {
+            for (var y = -300; y < 300; y += resolution) {
+                for (var x = -350; x < 350; x += resolution) {
+                    netx.w[0] = x;
+                    netx.w[1] = y;
+                    netx.w[2] = z;
+                    var a = net.forward(netx);
+                    if (isNaN(a.w[0]) || isNaN(a.w[1])) {
+                        // if something wrong happened...
+                        console.log("NaN detected", "a.w[0]", a.w[0], "a.w[1]", a.w[1]);
+                    }
+                    if (a.w[0] < a.w[1]) {
+                        dotsClass.push(1);
+                    } else {
+                        dotsClass.push(0);
+                    }
+
+                }
+            }
+        }
+    }
+
+    // draw cubes with their classes on canvas
+
+    function drawDots() {
+        var iter = 0;
+
+        for (var z = -200; z < 200; z += resolution) {
+            for (var y = -300; y < 300; y += resolution) {
+                for (var x = -350; x < 350; x += resolution) {
+                    if (isClass1Visible && dotsClass[iter] == 1) {
+                        push();
+                        translate(x, y, z);
+                        ambientMaterial(7, 161, 204, dotsOpacity);
+                        box(cubeEdge, cubeEdge, cubeEdge);
+                        pop();
+                    }
+
+                    if (isClass0Visible && dotsClass[iter] == 0) {
+                        push();
+                        translate(x, y, z);
+                        ambientMaterial(204, 5, 62, dotsOpacity);
+                        box(cubeEdge, cubeEdge, cubeEdge);
+                        pop();
+                    }
+
+                    iter++;
+                }
+            }
+        }
+    }
+
+    // some globals and events for camera
+    var yAngle = 0;
+    var xAngle = 0;
+    var depth = 2000;
+
+    var yRotAngle = 0;
+    var xRotAngle = 0;
+
+    var lastMouseX = null,
+        lastMouseY = null;
+
+    function mousePressed() {
+        lastMouseX = mouseX;
+        lastMouseY = mouseY;
+    }
+
+    function mouseDragged() {
+        if (canRotateCanvas) {
+            xRotAngle += mouseX - lastMouseX;
+            lastMouseX = mouseX;
+
+            yRotAngle += mouseY - lastMouseY;
+            lastMouseY = mouseY;
+            return false;
+        }
+    }
+
+    function mouseWheel(event) {
+        depth += event.delta;
+        return false;
+    }
+
+    // p5 graphics
+    var canvas;
+
+    function setup() {
+        canvas = createCanvas(750, 500, WEBGL);
+        canvas.parent($("#dvMain")[0]);
+        canTrainCNN = true;
+
+        populateInitData();
+        initNet();
+        trainNet();
+        classifyDots();
+        bindEventListeners();
+    }
+
+    function draw() {
+        background(5, 6, 17, 50);
+        ambientLight(255, 241, 224);
+        directionalLight(255, 241, 224, 0.8, 0.8, -0.25);
+
+        camera(xAngle, yAngle, depth / 5);
+
+        this.rotateX(radians(yRotAngle / 2));
+        this.rotateY(radians(xRotAngle / 2));
+
+        drawDots();
+        drawAxes();
+        drawData();
+        if (keyIsDown(LEFT_ARROW))
+            xAngle -= 5;
+
+        if (keyIsDown(RIGHT_ARROW))
+            xAngle += 5;
+
+        if (keyIsDown(UP_ARROW))
+            yAngle -= 5;
+
+        if (keyIsDown(DOWN_ARROW))
+            yAngle += 5;
+    }
+</script>
+</body>
+
+</html>

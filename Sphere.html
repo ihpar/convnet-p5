@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>P5 Sphere</title>
+    <script language="javascript" type="text/javascript" src="js/jquery-3.2.1.min.js"></script>
+    <script language="javascript" type="text/javascript" src="js/p5.js"></script>
+    <style>
+        #dvMain {
+            width: 600px;
+            height: 600px;
+            margin-left: auto;
+            margin-right: auto;
+            margin-bottom: 20px;
+            border: 2px solid #eee;
+            border-radius: 6px;
+            padding: 6px;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="dvMain"></div>
+    <script>
+        var yRotAngle = 0;
+        var xRotAngle = 0;
+        var lastMouseX, lastMouseY;
+
+        function mousePressed() {
+            lastMouseX = mouseX;
+            lastMouseY = mouseY;
+        }
+
+        function mouseDragged() {
+            xRotAngle += mouseX - lastMouseX;
+            lastMouseX = mouseX;
+
+            yRotAngle += mouseY - lastMouseY;
+            lastMouseY = mouseY;
+            return false;
+        }
+
+        var r = 200;
+        var total = 14;
+        var globe = [];
+
+        function setup() {
+            canvas = createCanvas(600, 600, WEBGL);
+            canvas.parent($("#dvMain")[0]);
+
+            for (var i = 0; i < total * 2 + 1; i++) {
+                var lon = map(i, 0, total * 2, -PI, PI);
+                globe[i] = [];
+                for (var j = 0; j < total + 1; j++) {
+                    var lat = map(j, 0, total, -HALF_PI, HALF_PI);
+                    var x = r * sin(lon) * cos(lat);
+                    var y = r * sin(lon) * sin(lat);
+                    var z = r * cos(lon);
+                    globe[i][j] = createVector(x, y, z);
+                }
+            }
+        }
+
+        function draw() {
+            ambientLight(255);
+            background(0);
+
+            this.rotateX(radians(yRotAngle / 2));
+            this.rotateY(radians(xRotAngle / 2));
+            var v, x, y, z;
+            for (var i = 0; i < total * 2; i++) {
+
+                for (var j = 0; j < total; j++) {
+                    beginShape();
+
+                    v = globe[i][j];
+                    x = v.x;
+                    y = v.y;
+                    z = v.z;
+                    vertex(x, y, z);
+
+                    v = globe[i][j + 1];
+                    x = v.x;
+                    y = v.y;
+                    z = v.z;
+                    vertex(x, y, z);
+
+                    endShape();
+
+                    beginShape();
+
+                    vertex(x, y, z);
+
+                    v = globe[i + 1][j];
+                    x = v.x;
+                    y = v.y;
+                    z = v.z;
+                    vertex(x, y, z);
+
+                    endShape();
+
+                    beginShape();
+
+                    vertex(x, y, z);
+
+                    v = globe[i][j];
+                    x = v.x;
+                    y = v.y;
+                    z = v.z;
+                    vertex(x, y, z);
+
+                    endShape();
+                }
+
+            }
+        }
+    </script>
+</body>
+
+</html>
